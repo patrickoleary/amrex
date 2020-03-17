@@ -97,6 +97,10 @@ if (ENABLE_SENSEI_INSITU)
    add_subdirectory(Extern/SENSEI)
 endif ()
 
+if (ENABLE_CATALYST_INSITU)
+   add_subdirectory(Extern/Catalyst)
+endif ()
+
 if (ENABLE_SUNDIALS)
    add_subdirectory(Extern/SUNDIALS4)
 endif ()

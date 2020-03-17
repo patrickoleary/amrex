@@ -32,6 +32,10 @@ class AmrTask;
 class AmrInSituBridge;
 #endif
 
+#if defined(BL_USE_CATALYST_INSITU)
+    class AmrCatalystDataAdaptor;
+#endif
+
 /**
 * \brief Manage hierarchy of levels for time-dependent AMR computations.
 *
@@ -478,6 +482,10 @@ protected:
 
 #if defined(BL_USE_SENSEI_INSITU)
     static AmrInSituBridge *insitu_bridge;
+#endif
+
+#if defined(BL_USE_CATALYST_INSITU)
+    static AmrCatalystDataAdaptor *insitu_data_adaptor;
 #endif
 
 public:

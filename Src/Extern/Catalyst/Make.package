@@ -1,0 +1,25 @@
+
+CATALYST_INSITU=EXE
+
+ifeq ($(USE_CATALYST_INSITU),TRUE)
+
+  # base classes and utils
+  C$(CATALYST_INSITU)_headers += AMReX_CatalystDataAdaptor.H AMReX_StateMap.H AMReX_VTKGhostUtils.H
+  C$(CATALYST_INSITU)_sources += AMReX_CatalystDataAdaptor.cpp AMReX_StateMap.cpp
+
+  # AmrCore data adaptor
+  C$(CATALYST_INSITU)_headers += AMReX_AmrMeshDataAdaptor.H \
+                              AMReX_AmrMeshInSituBridge.H
+
+  C$(CATALYST_INSITU)_sources += AMReX_AmrMeshDataAdaptor.cpp \
+                              AMReX_AmrMeshInSituBridge.cpp
+
+  # Amr Catalyst data adaptor
+  C$(CATALYST_INSITU)_headers += AMReX_AmrCatalystDataAdaptor.H
+
+  C$(CATALYST_INSITU)_sources += AMReX_AmrCatalystDataAdaptor.cpp
+
+endif
+
+VPATH_LOCATIONS += $(AMREX_HOME)/Src/Extern/Catalyst
+INCLUDE_LOCATIONS += $(AMREX_HOME)/Src/Extern/Catalyst

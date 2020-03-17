@@ -75,6 +75,10 @@ extern struct sMsgMap_t{
 #include <AMReX_AmrInSituBridge.H>
 #endif
 
+#ifdef BL_USE_CATALYST_INSITU
+#include <AMReX_AmrCatalystDataAdaptor.H>
+#endif
+
 namespace amrex {
 
 //
@@ -90,6 +94,9 @@ Vector<BoxArray>       Amr::initial_ba;
 Vector<BoxArray>       Amr::regrid_ba;
 #ifdef BL_USE_SENSEI_INSITU
 AmrInSituBridge*       Amr::insitu_bridge;
+#endif
+#ifdef BL_USE_CATALYST_INSITU
+AmrCatalystDataAdaptor*       Amr::insitu_data_adaptor;
 #endif
 
 namespace
@@ -158,6 +165,9 @@ Amr::Initialize ()
     checkpoint_headerversion = VisMF::Header::Version_v1;
 #ifdef BL_USE_SENSEI_INSITU
     insitu_bridge            = nullptr;
+#endif
+#ifdef BL_USE_CATALYST_INSITU
+    insitu_data_adaptor      = nullptr;
 #endif
     amrex::ExecOnFinalize(Amr::Finalize);
 
@@ -275,6 +285,9 @@ Amr::InitAmr ()
     message_int            = 10;
 #ifdef BL_USE_SENSEI_INSITU
     insitu_bridge          = nullptr;
+#endif
+#ifdef BL_USE_CATALYST_INSITU
+    insitu_data_adaptor    = nullptr;
 #endif
 
     for (int i = 0; i < AMREX_SPACEDIM; i++)
@@ -530,6 +543,14 @@ Amr::initInSitu()
         amrex::Abort();
     }
 #endif
+#if defined(BL_USE_CATALYST_INSITU)
+    insitu_data_adaptor = new AmrCatalystDataAdaptor;
+    if (insitu_data_adaptor->Initialize())
+    {
+        amrex::ErrorStream() << "Amr::initInSitu : Catalyst failed to initialize." << std::endl;
+        amrex::Abort();
+    }
+#endif
     return 0;
 }
 
@@ -540,6 +561,13 @@ Amr::updateInSitu()
     if (insitu_bridge && insitu_bridge->update(this))
     {
         amrex::ErrorStream() << "Amr::updateInSitu : Failed to update." << std::endl;
+        amrex::Abort();
+    }
+#endif
+#if defined(BL_USE_CATALYST_INSITU)
+    if (insitu_data_adaptor && insitu_data_adaptor->CoProcess(this))
+    {
+        amrex::ErrorStream() << "Amr::updateInSitu : Catalyst failed to coprocess." << std::endl;
         amrex::Abort();
     }
 #endif
@@ -557,6 +585,16 @@ Amr::finalizeInSitu()
 
         delete insitu_bridge;
         insitu_bridge = nullptr;
+    }
+#endif
+#if defined(BL_USE_CATALYST_INSITU)
+    if (insitu_data_adaptor)
+    {
+        if (insitu_data_adaptor->Finalize())
+            amrex::ErrorStream() << "Amr::finalizeInSitu : Catalyst failed to finalize." << std::endl;
+
+        delete insitu_data_adaptor;
+        insitu_data_adaptor = nullptr;
     }
 #endif
     return 0;
