@@ -7,12 +7,10 @@ ifeq ($(USE_CATALYST_INSITU),TRUE)
   C$(CATALYST_INSITU)_headers += AMReX_CatalystDataAdaptor.H AMReX_StateMap.H AMReX_VTKGhostUtils.H
   C$(CATALYST_INSITU)_sources += AMReX_CatalystDataAdaptor.cpp AMReX_StateMap.cpp
 
-  # AmrCore data adaptor
-  C$(CATALYST_INSITU)_headers += AMReX_AmrMeshDataAdaptor.H \
-                              AMReX_AmrMeshInSituBridge.H
+  # AmrCore Catalyst data adaptor
+  C$(CATALYST_INSITU)_headers += AMReX_AmrMeshCatalystDataAdaptor.H
 
-  C$(CATALYST_INSITU)_sources += AMReX_AmrMeshDataAdaptor.cpp \
-                              AMReX_AmrMeshInSituBridge.cpp
+  C$(CATALYST_INSITU)_sources += AMReX_AmrMeshCatalystDataAdaptor.cpp
 
   # Amr Catalyst data adaptor
   C$(CATALYST_INSITU)_headers += AMReX_AmrCatalystDataAdaptor.H
