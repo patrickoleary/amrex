@@ -225,6 +225,12 @@ else
   USE_SENSEI_INSITU := FALSE
 endif
 
+ifdef USE_CATALYST_INSITU
+  USE_CATALYST_INSITU := $(strip $(USE_CATALYST_INSITU))
+else
+  USE_CATALYST_INSITU := FALSE
+endif
+
 ifdef EBASE
   EBASE := $(strip $(EBASE))
 else
@@ -813,6 +819,11 @@ endif
 ifeq ($(USE_SENSEI_INSITU),TRUE)
   $(info Loading $(AMREX_HOME)/Tools/GNUMake/tools/Make.sensei...)
   include        $(AMREX_HOME)/Tools/GNUMake/tools/Make.sensei
+endif
+
+ifeq ($(USE_CATALYST_INSITU),TRUE)
+  $(info Loading $(AMREX_HOME)/Tools/GNUMake/tools/Make.catalyst...)
+  include        $(AMREX_HOME)/Tools/GNUMake/tools/Make.catalyst
 endif
 
 ifneq ("$(wildcard $(AMREX_HOME)/Tools/GNUMake/Make.local)","")

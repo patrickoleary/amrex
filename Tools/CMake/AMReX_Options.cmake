@@ -143,7 +143,8 @@ endif ()
 option( ENABLE_SENSEI_INSITU "Enable SENSEI in situ infrastructure" OFF )
 print_option( ENABLE_SENSEI_INSITU )
 
-
+option( ENABLE_CATALYST_INSITU "Enable ParaView Catalyst in situ infrastructure" OFF )
+print_option( ENABLE_CATALYST_INSITU )
 #
 # Conduit Support (for features in Src/Extern/Conduit)
 # Note: ENABLE_CONDUIT = ON, requires CONDUIT_DIR.
