@@ -16,6 +16,10 @@
 #include <AMReX_AmrMeshInSituBridge.H>
 #endif
 
+#ifdef BL_USE_CATALYST_INSITU
+#include <AMReX_AmrMeshCatalystDataAdaptor.H>
+#endif
+
 #ifdef AMREX_MEM_PROFILING
 #include <AMReX_MemProfiler.H>
 #endif

@@ -26,6 +26,12 @@ class AmrMeshInSituBridge;
 }
 #endif
 
+#if defined(BL_USE_CATALYST_INSITU)
+namespace amrex {
+class AmrMeshCatalystDataAdaptor;
+}
+#endif
+
 //using namespace amrex;
 
 namespace amrex {
@@ -353,6 +359,10 @@ private:
 
 #if defined(BL_USE_SENSEI_INSITU)
     amrex::AmrMeshInSituBridge *insitu_bridge;
+#endif
+
+#if defined(BL_USE_CATALYST_INSITU)
+        amrex::AmrMeshCatalystDataAdaptor *insitu_data_adaptor;
 #endif
 };
 
