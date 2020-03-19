@@ -18,8 +18,8 @@ class MultiFab;
 class AmrMeshCatalystDataAdaptor : public CatalystDataAdaptor
 {
 public:
-    AmrMeshCatalystDataAdaptor() {}
-    ~AmrMeshCatalystDataAdaptor() {}
+    AmrMeshCatalystDataAdaptor();
+    ~AmrMeshCatalystDataAdaptor();
 
     AmrMeshCatalystDataAdaptor(const AmrMeshCatalystDataAdaptor&) = delete;
     void operator=(const AmrMeshCatalystDataAdaptor&) = delete;
@@ -32,10 +32,11 @@ public:
 private:
     struct InternalsType;
     InternalsType *Internals;
-    int BuildGrid();
-    int AddGhostCellsArray();
-    int AddArray(int association, const std::string &arrayName);
-    int AddArrays(const std::vector<amrex::Vector<amrex::MultiFab> *> &states,
+    int BuildGrid(int rank);
+    int AddGhostCellsArray(int rank);
+    int AddArray(int rank, int association, const std::string &arrayName);
+    int AddArrays(int rank,
+                  const std::vector<amrex::Vector<amrex::MultiFab> *> &states,
                   const std::vector<std::vector<std::string>> &names);
 };
 

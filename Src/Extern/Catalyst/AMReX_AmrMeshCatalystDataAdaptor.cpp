@@ -1,18 +1,22 @@
 #include "AMReX_AmrMeshCatalystDataAdaptor.H"
 
 #include <chrono>
-#include <timer/Timer.h>
 
-#include <vtkObjectFactory.h>
-#include <vtkOverlappingAMR.h>
-#include <vtkAMRBox.h>
-#include <vtkUniformGrid.h>
-#include <vtkDataSetAttributes.h>
-#include <vtkUnsignedCharArray.h>
-#include <vtkFloatArray.h>
-#include <vtkDoubleArray.h>
-#include <vtkCellData.h>
-#include <vtkPointData.h>
+#include <vtkAMRBox.h>                 // VTK::CommonDataModel
+#include <vtkCellData.h>               // VTK::CommonDataModel
+#include <vtkCPDataDescription.h>      // ParaView::Catalyst
+#include <vtkCPInputDataDescription.h> // ParaView::Catalyst
+#include <vtkDataSetAttributes.h>      // VTK::CommonDataModel
+#include <vtkDoubleArray.h>            // VTK::CommonCore
+#include <vtkFloatArray.h>             // VTK::CommonCore
+#include <vtkMultiProcessController.h> // VTK::ParallelCore
+#include <vtkObject.h>                 // VTK::CommonCore
+#include <vtkObjectFactory.h>          // VTK::CommonCore
+#include <vtkOverlappingAMR.h>         // VTK::CommonDataModel
+#include <vtkPointData.h>              // VTK::CommonDataModel
+#include <vtkCPProcessor.h>            // ParaView::Catalyst
+#include <vtkUniformGrid.h>            // VTK::CommonDataModel
+#include <vtkUnsignedCharArray.h>      // VTK::CommonCore
 
 #include <AMReX_ParmParse.H>
 #include <AMReX_AmrMesh.H>
@@ -27,6 +31,7 @@
 #include <AMReX_DistributionMapping.H>
 #include <AMReX_IndexType.H>
 #include <AMReX_VTKGhostUtils.H>
+#include <AMReX_StateMap.H>
 #include <AMReX_Print.H>
 
 namespace amrex {
@@ -102,7 +107,7 @@ namespace amrex {
             amrex::Print() << "Catalyst Begin CoProcess..." << std::endl;
             auto t0 = std::chrono::high_resolution_clock::now();
 
-            timer::MarkEvent event("AmrMeshCatalystDataAdaptor::CoProcess");
+            amrex::Print() << "AmrMeshCatalystDataAdaptor::CoProcess" << std::endl;
 
             vtkNew<vtkCPDataDescription> dataDescription;
             dataDescription->AddInput("amrmesh-input");
@@ -117,14 +122,14 @@ namespace amrex {
                 this->Internals->States = states;
                 this->Internals->descriptorMap.Initialize(states, names);
 
-                this->BuildGrid();
-                this->AddGhostCellsArray();
-                this->AddArrays(states, names);
+                this->BuildGrid(processId);
+                this->AddGhostCellsArray(processId);
+                this->AddArrays(processId, states, names);
 
                 vtkCPInputDataDescription* inputDataDescription = dataDescription->GetInputDescriptionByName("amrex-input");
                 inputDataDescription->SetGrid(this->Internals->amrMesh);
 
-                // Set whole extent - ???
+                // Set whole extent
                 int wholeExtent[6] = { 0, numberOfProcesses, 0, 1, 0, 1 };
                 inputDataDescription->SetWholeExtent(wholeExtent);
 
@@ -146,9 +151,9 @@ namespace amrex {
     }
 
 //-----------------------------------------------------------------------------
-    int AmrMeshCatalystDataAdaptor::BuildGrid()
+    int AmrMeshCatalystDataAdaptor::BuildGrid(int rank)
     {
-        timer::MarkEvent("AmrMeshCatalystDataAdaptor::BuildGrid");
+        amrex::Print() << "AmrMeshCatalystDataAdaptor::BuildGrid" << std::endl;
 
         unsigned int nLevels = this->Internals->Mesh->finestLevel() + 1;
 
@@ -238,12 +243,9 @@ namespace amrex {
     }
 
 //-----------------------------------------------------------------------------
-    int AmrMeshCatalystDataAdaptor::AddGhostCellsArray()
+    int AmrMeshCatalystDataAdaptor::AddGhostCellsArray(int rank)
     {
-        timer::MarkEvent("AmrMeshCatalystDataAdaptor::AddGhostCellsArray");
-
-        int rank = 0;
-        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        amrex::Print() << "AmrMeshCatalystDataAdaptor::AddGhostCellsArray" << std::endl;
 
         // loop over levels
         unsigned int nLevels = this->Internals->Mesh->finestLevel() + 1;
@@ -260,12 +262,10 @@ namespace amrex {
             unsigned int ng = state.nGrow();
 
             std::vector<unsigned char*> mask;
-            VTKGhostUtils::AllocateBoxArray<unsigned char>(
-                    pdom, boxes, dmap, ng, mask);
+            VTKGhostUtils::AllocateBoxArray<unsigned char>(rank, pdom, boxes, dmap, ng, mask);
 
             // mask ghost cells
-            VTKGhostUtils::MaskGhostCells<unsigned char>(
-                    pdom, boxes, dmap, ng, mask);
+            VTKGhostUtils::MaskGhostCells<unsigned char>(rank, pdom, boxes, dmap, ng, mask);
 
             // store mask array
             masks[i] = mask;
@@ -287,8 +287,7 @@ namespace amrex {
             const amrex::BoxArray &fBoxes = this->Internals->Mesh->boxArray(ii);
             amrex::IntVect cRefRatio = this->Internals->Mesh->refRatio(i);
 
-            VTKGhostUtils::MaskCoveredCells<unsigned char>(
-                    pdom, cBoxes, cMap, fBoxes, cRefRatio, ng, masks[i]);
+            VTKGhostUtils::MaskCoveredCells<unsigned char>(rank, pdom, cBoxes, cMap, fBoxes, cRefRatio, ng, masks[i]);
         }
 
         // loop over levels
@@ -333,12 +332,9 @@ namespace amrex {
     }
 
     //-----------------------------------------------------------------------------
-    int AmrMeshCatalystDataAdaptor::AddArray(int association, const std::string &arrayName)
+    int AmrMeshCatalystDataAdaptor::AddArray(int rank, int association, const std::string &arrayName)
     {
-        timer::MarkEvent("AmrMeshCatalystDataAdaptor::AddArray");
-
-        int rank = 0;
-        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        amrex::Print() << "AmrMeshCatalystDataAdaptor::AddArray" << std::endl;
 
         if ((association != vtkDataObject::CELL) &&
             (association != vtkDataObject::POINT))
@@ -357,7 +353,7 @@ namespace amrex {
         {
             amrex::Print() << "Error @ AmrMeshCatalystDataAdaptor::AddArray: "
                            << "Failed to locate descriptor for "
-                           << amrex::StateMap::GetAttributesName(association)
+                           << this->Internals->descriptorMap.GetAttributesName(association)
                            << " data array " << arrayName
                            << std::endl;
             return -1;
@@ -473,10 +469,11 @@ namespace amrex {
     }
 
     //-----------------------------------------------------------------------------
-    int AmrMeshCatalystDataAdaptor::AddArrays(const std::vector<amrex::Vector<amrex::MultiFab> *> &states,
+    int AmrMeshCatalystDataAdaptor::AddArrays(int rank,
+                                              const std::vector<amrex::Vector<amrex::MultiFab> *> &states,
                                               const std::vector<std::vector<std::string>> &names)
     {
-        timer::MarkEvent("AmrMeshCatalystDataAdaptor::AddArrays");
+        amrex::Print() << "AmrMeshCatalystDataAdaptor::AddArrays" << std::endl;
 
         int nStates = states.size();
         for (int i = 0; i < nStates; ++i)
@@ -490,11 +487,11 @@ namespace amrex {
 
                 if (state.is_cell_centered())
                 {
-                    this->AddArray(vtkDataObject::CELL, arrayName);
+                    this->AddArray(rank, vtkDataObject::CELL, arrayName);
                 }
                 else if (state.is_nodal())
                 {
-                    this->AddArray(vtkDataObject::POINT, arrayName);
+                    this->AddArray(rank, vtkDataObject::POINT, arrayName);
                 }
             }
         }

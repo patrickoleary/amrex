@@ -1,9 +1,24 @@
 #include "AMReX_AmrCatalystDataAdaptor.H"
 
 #include <chrono>
-#include <timer/Timer.h>
 #include <map>
 #include <utility>
+
+#include <vtkAMRBox.h>                 // VTK::CommonDataModel
+#include <vtkCellData.h>               // VTK::CommonDataModel
+#include <vtkCPDataDescription.h>      // ParaView::Catalyst
+#include <vtkCPInputDataDescription.h> // ParaView::Catalyst
+#include <vtkDataSetAttributes.h>      // VTK::CommonDataModel
+#include <vtkDoubleArray.h>            // VTK::CommonCore
+#include <vtkFloatArray.h>             // VTK::CommonCore
+#include <vtkMultiProcessController.h> // VTK::ParallelCore
+#include <vtkObject.h>                 // VTK::CommonCore
+#include <vtkObjectFactory.h>          // VTK::CommonCore
+#include <vtkOverlappingAMR.h>         // VTK::CommonDataModel
+#include <vtkPointData.h>              // VTK::CommonDataModel
+#include <vtkCPProcessor.h>            // ParaView::Catalyst
+#include <vtkUniformGrid.h>            // VTK::CommonDataModel
+#include <vtkUnsignedCharArray.h>      // VTK::CommonCore
 
 #include <AMReX_Amr.H>
 #include <AMReX_AmrLevel.H>
@@ -19,24 +34,6 @@
 #include <AMReX_VTKGhostUtils.H>
 #include <AMReX_StateMap.H>
 #include <AMReX_Print.H>
-
-#include <mpi.h>
-
-#include <vtkAMRBox.h>
-#include <vtkCellData.h>
-#include <vtkCPDataDescription.h>
-#include <vtkCPInputDataDescription.h>
-#include <vtkDataSetAttributes.h>
-#include <vtkDataObject.h>
-#include <vtkDoubleArray.h>
-#include <vtkFloatArray.h>
-#include <vtkMultiProcessController.h>
-#include <vtkObjectFactory.h>
-#include <vtkOverlappingAMR.h>
-#include <vtkPointData.h>
-#include <vtkUniformGrid.h>
-#include <vtkUnsignedCharArray.h>
-#include <vtkXMLUniformGridAMRWriter.h>
 
 // return the number of levels currently in use
 static
@@ -123,29 +120,30 @@ namespace amrex {
             amrex::Print() << "Catalyst Begin CoProcess..." << std::endl;
             auto t0 = std::chrono::high_resolution_clock::now();
 
-            timer::MarkEvent event("AMRCatalystDataAdaptor::CoProcess");
+            amrex::Print() << "AMRCatalystDataAdaptor::CoProcess" << std::endl;
+
+            this->Internals->amr = aamr;
 
             vtkNew<vtkCPDataDescription> dataDescription;
             dataDescription->AddInput("amr-input");
-            dataDescription->SetTimeData(dataSource->cumTime(), dataSource->levelSteps(0));
+            dataDescription->SetTimeData(this->Internals->amr->cumTime(), this->Internals->amr->levelSteps(0));
             if (this->Processor->RequestDataDescription(dataDescription) != 0)
             {
                 vtkMultiProcessController* controller = vtkMultiProcessController::GetGlobalController();
                 int numberOfProcesses = controller->GetNumberOfProcesses();
                 int processId = controller->GetLocalProcessId();
 
-                this->Internals->amr = aamr;
-                amrex::Vector<std::unique_ptr<amrex::AmrLevel>> &levels = this->Internals->getAmrLevels();
+                amrex::Vector<std::unique_ptr<amrex::AmrLevel>> &levels = this->Internals->amr->getAmrLevels();
                 this->Internals->descriptorMap.Initialize(levels[0]->get_desc_lst());
 
-                this->BuildGrid();
-                this->AddGhostCellsArray();
-                this->AddArrays(levels[0]->get_desc_lst());
+                this->BuildGrid(processId);
+                this->AddGhostCellsArray(processId);
+                this->AddArrays(processId, levels[0]->get_desc_lst());
 
                 vtkCPInputDataDescription* inputDataDescription = dataDescription->GetInputDescriptionByName("amrex-input");
                 inputDataDescription->SetGrid(this->Internals->amrMesh);
 
-                // Set whole extent - ???
+                // Set whole extent
                 int wholeExtent[6] = { 0, numberOfProcesses, 0, 1, 0, 1 };
                 inputDataDescription->SetWholeExtent(wholeExtent);
 
@@ -167,15 +165,12 @@ namespace amrex {
     }
 
 //-----------------------------------------------------------------------------
-    int AmrCatalystDataAdaptor::BuildGrid()
+    int AmrCatalystDataAdaptor::BuildGrid(int rank)
     {
-        timer::MarkEvent("AmrCatalystDataAdaptor::BuildGrid");
-
-        int rank = 0;
-        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        amrex::Print() << "AmrCatalystDataAdaptor::BuildGrid" << std::endl;
 
         // get levels
-        amrex::Vector<std::unique_ptr<amrex::AmrLevel>> &levels = this->Internals-amr->getAmrLevels();
+        amrex::Vector<std::unique_ptr<amrex::AmrLevel>> &levels = this->Internals->amr->getAmrLevels();
 
         unsigned int nLevels = numActiveLevels(levels);
 
@@ -264,12 +259,9 @@ namespace amrex {
     }
 
 //-----------------------------------------------------------------------------
-    int AmrCatalystDataAdaptor::AddGhostCellsArray()
+    int AmrCatalystDataAdaptor::AddGhostCellsArray(int rank)
     {
-        timer::MarkEvent("AmrDataAdaptor::AddGhostCellsArray");
-
-        int rank = 0;
-        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        amrex::Print() << "AmrCatalystDataAdaptor::AddGhostCellsArray" << std::endl;
 
         // loop over levels
         amrex::Vector<std::unique_ptr<amrex::AmrLevel>> &levels = this->Internals->amr->getAmrLevels();
@@ -288,10 +280,10 @@ namespace amrex {
             unsigned int ng = state.nGrow();
 
             std::vector<unsigned char*> mask;
-            VTKGhostUtils::AllocateBoxArray<unsigned char>(pdom, boxes, dmap, ng, mask);
+            VTKGhostUtils::AllocateBoxArray<unsigned char>(rank, pdom, boxes, dmap, ng, mask);
 
             // mask ghost cells
-            VTKGhostUtils::MaskGhostCells<unsigned char>(pdom, boxes, dmap, ng, mask);
+            VTKGhostUtils::MaskGhostCells<unsigned char>(rank, pdom, boxes, dmap, ng, mask);
 
             // store mask array
             masks[i] = mask;
@@ -313,8 +305,7 @@ namespace amrex {
             const amrex::BoxArray &fBoxes = levels[ii]->boxArray();
             amrex::IntVect fRefRatio = levels[i]->fineRatio();
 
-            VTKGhostUtils::MaskCoveredCells<unsigned char>(
-                    pdom, cBoxes, cMap, fBoxes, fRefRatio, ng, masks[i]);
+            VTKGhostUtils::MaskCoveredCells<unsigned char>(rank, pdom, cBoxes, cMap, fBoxes, fRefRatio, ng, masks[i]);
         }
 
         // loop over levels
@@ -360,12 +351,9 @@ namespace amrex {
     }
 
 //-----------------------------------------------------------------------------
-    int AmrCatalystDataAdaptor::AddArray(int association, const std::string &arrayName)
+    int AmrCatalystDataAdaptor::AddArray(int rank, int association, const std::string &arrayName)
     {
-        timer::MarkEvent("AmrCatalystDataAdaptor::AddArray");
-
-        int rank = 0;
-        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        amrex::Print() << "AmrCatalystDataAdaptor::AddArray" << std::endl;
 
         if ((association != vtkDataObject::CELL) &&
             (association != vtkDataObject::POINT))
@@ -386,7 +374,7 @@ namespace amrex {
         {
             amrex::Print() << "Error @ AmrCatalystDataAdaptor::AddArray: "
                     << "Failed to locate descriptor for "
-                    << amrex::StateMap::GetAttributesName(association)
+                    << this->Internals->descriptorMap.GetAttributesName(association)
                     << " data array " << arrayName
                     << std::endl;
             return -1;
@@ -501,19 +489,28 @@ namespace amrex {
     }
 
 //-----------------------------------------------------------------------------
-    int AmrCatalystDataAdaptor::AddArrays(const DescriptorList &descriptors) {
-        timer::MarkEvent("AmrCatalystDataAdaptor::AddArrays");
+    int AmrCatalystDataAdaptor::AddArrays(int rank, const DescriptorList &descriptors) {
+        amrex::Print() << "AmrCatalystDataAdaptor::AddArrays" << std::endl;
+
         int ndesc = descriptors.size();
         for (int i = 0; i < ndesc; ++i) {
+
             const StateDescriptor &desc = descriptors[i];
             int ncomp = desc.nComp();
             IndexType itype = desc.getType();
+
             for (int j = 0; j < ncomp; ++j) {
+
                 std::string arrayName = desc.name(j);
+
                 if (itype.cellCentered()) {
-                    this->AddArray(vtkDataObject::CELL, arrayName);
+
+                    this->AddArray(rank, vtkDataObject::CELL, arrayName);
+
                 } else if (itype.nodeCentered()) {
-                    this->AddArray(vtkDataObject::POINT, arrayName);
+
+                    this->AddArray(rank, vtkDataObject::POINT, arrayName);
+
                 }
             }
         }

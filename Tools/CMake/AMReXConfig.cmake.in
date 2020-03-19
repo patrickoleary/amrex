@@ -104,7 +104,7 @@ if (@ENABLE_SENSEI_INSITU@)
 endif ()
 
 if (@ENABLE_CATALYST_INSITU@)
-   find_dependency(ParaView REQUIRED)
+   find_dependency(ParaView 5.8 REQUIRED)
 endif ()
 
 if (@ENABLE_CONDUIT@)

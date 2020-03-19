@@ -1,6 +1,6 @@
 #include "AMReX_StateMap.H"
 
-#include <vtkDataObject.h>
+#include <vtkDataObject.h> // VTK::CommonDataModel
 
 #include <AMReX_Print.H>
 

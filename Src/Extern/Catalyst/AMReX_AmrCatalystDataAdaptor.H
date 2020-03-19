@@ -13,8 +13,8 @@ class DescriptorList;
 class AmrCatalystDataAdaptor : public CatalystDataAdaptor
 {
 public:
-    AmrCatalystDataAdaptor() {}
-    ~AmrCatalystDataAdaptor() {}
+    AmrCatalystDataAdaptor();
+    ~AmrCatalystDataAdaptor();
 
     AmrCatalystDataAdaptor(const AmrCatalystDataAdaptor&) = delete;
     void operator=(const AmrCatalystDataAdaptor&) = delete;
@@ -27,10 +27,10 @@ public:
 private:
     struct InternalsType;
     InternalsType *Internals;
-    int BuildGrid();
-    int AddGhostCellsArray();
-    int AddArray(int association, const std::string &arrayName);
-    int AddArrays(const DescriptorList &descriptors);
+    int BuildGrid(int rank);
+    int AddGhostCellsArray(int rank);
+    int AddArray(int rank, int association, const std::string &arrayName);
+    int AddArrays(int rank, const DescriptorList &descriptors);
 };
 
 }

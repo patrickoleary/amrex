@@ -2,6 +2,7 @@
 #define AMReX_CatalystDataAdaptor_H
 
 #include <string>
+
 #include <AMReX_Vector.H>
 
 class vtkCPProcessor;

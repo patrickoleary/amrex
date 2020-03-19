@@ -1,10 +1,12 @@
 #ifndef AMReX_VTKGhostUtils_H
 #define AMReX_VTKGhostUtils_H
 
-#include <vtkDataSetAttributes.h>
-#include <vtkUnsignedCharArray.h>
-#include <vtkFloatArray.h>
-#include <vtkDoubleArray.h>
+#include <vector>
+
+#include <vtkDataSetAttributes.h> // VTK::CommonDataModel
+#include <vtkDoubleArray.h>       // VTK::CommonCore
+#include <vtkFloatArray.h>        // VTK::CommonCore
+#include <vtkUnsignedCharArray.h> // VTK::CommonCore
 
 #include <AMReX_BoxArray.H>
 #include <AMReX_Geometry.H>
@@ -14,8 +16,6 @@
 #include <AMReX_MFIter.H>
 #include <AMReX_DistributionMapping.H>
 #include <AMReX_IndexType.H>
-
-#include <vector>
 
 namespace amrex {
     namespace VTKGhostUtils {
@@ -66,12 +66,9 @@ namespace amrex {
 
         // --------------------------------------------------------------------------
         template <typename n_t>
-        int AllocateBoxArray(const amrex::Box &pdom, const amrex::BoxArray &boxes,
-            const amrex::DistributionMapping &dmap, int ng, std::vector<n_t*> &darrays)
+        int AllocateBoxArray(int rank, const amrex::Box &pdom, const amrex::BoxArray &boxes,
+                             const amrex::DistributionMapping &dmap, int ng, std::vector<n_t*> &darrays)
         {
-            int rank = 0;
-            MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
             unsigned int nBoxes = boxes.size();
 
             darrays.resize(nBoxes, nullptr);
@@ -90,8 +87,7 @@ namespace amrex {
                 for (unsigned int q = 0; q < AMREX_SPACEDIM; ++q)
                     box.grow(q, ng);
 
-                // TODO -- handle node cenetred data via flag
-                // and surroundingNodes
+                // TODO -- handle node cenetred data via flag and surroundingNodes
 
                 // array size
                 int lo[3] = {AMREX_ARLIM(box.loVect())};
@@ -121,16 +117,12 @@ namespace amrex {
 
         // --------------------------------------------------------------------------
         template <typename n_t>
-        int MaskGhostCells(const amrex::Box &pdom, const amrex::BoxArray &boxes,
-            const amrex::DistributionMapping &dmap, unsigned int ng,
-            std::vector<n_t*> &darrays)
+        int MaskGhostCells(int rank, const amrex::Box &pdom, const amrex::BoxArray &boxes,
+                           const amrex::DistributionMapping &dmap, unsigned int ng,std::vector<n_t*> &darrays)
         {
             // no ghosts to mask
             if (ng < 1)
                 return 0;
-
-            int rank = 0;
-            MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
             // loop over boxes
             unsigned int nBoxes = boxes.size();
@@ -201,13 +193,10 @@ namespace amrex {
 
         // --------------------------------------------------------------------------
         template <typename n_t>
-        int MaskCoveredCells(const amrex::Box &pdom, const amrex::BoxArray &cBoxes,
-            const amrex::DistributionMapping &cMap, amrex::BoxArray fBoxes,
-            const IntVect &fRefRatio, int ng, std::vector<n_t*> &cMasks)
+        int MaskCoveredCells(int rank, const amrex::Box &pdom, const amrex::BoxArray &cBoxes,
+                             const amrex::DistributionMapping &cMap, amrex::BoxArray fBoxes,
+                             const IntVect &fRefRatio, int ng, std::vector<n_t*> &cMasks)
         {
-            int rank = 0;
-            MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
             // work in the coarse level index space
             fBoxes.coarsen(fRefRatio);
 

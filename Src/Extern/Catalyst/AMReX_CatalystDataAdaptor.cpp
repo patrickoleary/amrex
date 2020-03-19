@@ -1,12 +1,13 @@
 #include "AMReX_CatalystDataAdaptor.H"
 
-#include <AMReX_ParmParse.H>
-
 #include <chrono>
-#include <timer/Timer.h>
-#include <vtkCPProcessor.h>
-#include <vtkCPPythonScriptPipeline.h>
-#include <vtkNew.h>
+
+#include <vtkCPProcessor.h>            // ParaView::Catalyst
+#include <vtkCPPythonScriptPipeline.h> // ParaView::PythonCatalyst
+#include <vtkNew.h>                    // VTK::CommonCore
+
+#include <AMReX_ParmParse.H>
+#include <AMReX_Print.H>
 
 namespace amrex {
 
@@ -14,19 +15,17 @@ CatalystDataAdaptor::CatalystDataAdaptor() :
     Processor(nullptr),
     counter(0), enabled(0), frequency(1)
 {
-    timer::Initialize();
 }
 
 CatalystDataAdaptor::~CatalystDataAdaptor()
 {
-    timer::Finalize();
 }
 
 int
 CatalystDataAdaptor::Initialize()
 {
     auto t0 = std::chrono::high_resolution_clock::now();
-    timer::MarkEvent event("CatalystDataAdaptor::Initialize");
+    amrex::Print() << "CatalystDataAdaptor::Initialize" << std::endl;
 
     // read config from ParmParse
     ParmParse pp("catalyst");
@@ -70,7 +69,7 @@ CatalystDataAdaptor::Initialize()
 bool
 CatalystDataAdaptor::doCoProcess()
 {
-    bool ret = analysis_adaptor && (frequency > 0) && ((counter % frequency) == 0);
+    bool ret = (frequency > 0) && ((counter % frequency) == 0);
     counter += 1;
     return ret;
 }
@@ -84,7 +83,7 @@ CatalystDataAdaptor::Finalize()
     amrex::Print() << "Catalyst Begin finalize..." << std::endl;
     auto t0 = std::chrono::high_resolution_clock::now();
 
-    timer::MarkEvent event("CatalystDataAdaptor::Finalize");
+    amrex::Print() << "CatalystDataAdaptor::Finalize" << std::endl;
     this->Processor->Delete();
     this->Processor = nullptr;
 
