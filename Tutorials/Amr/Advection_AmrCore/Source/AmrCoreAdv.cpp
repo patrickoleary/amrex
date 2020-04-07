@@ -14,6 +14,10 @@
 #include <AmrCoreAdv.H>
 #include <AmrCoreAdv_F.H>
 
+#ifdef BL_USE_CATALYST_INSITU
+#include <AMReX_AmrMeshCatalystDataAdaptor.H>
+#endif
+
 using namespace amrex;
 
 // constructor - reads in parameters from inputs file
@@ -83,10 +87,18 @@ AmrCoreAdv::AmrCoreAdv ()
     // with the lev/lev-1 interface (and has grid spacing associated with lev-1)
     // therefore flux_reg[0] is never actually used in the reflux operation
     flux_reg.resize(nlevs_max+1);
+
+#ifdef BL_USE_CATALYST_INSITU
+    insitu_data_adaptor = new amrex::AmrMeshCatalystDataAdaptor;
+    insitu_data_adaptor->Initialize();
+#endif
 }
 
 AmrCoreAdv::~AmrCoreAdv ()
 {
+#ifdef BL_USE_CATALYST_INSITU
+    delete insitu_data_adaptor;
+#endif
 }
 
 // advance solution to final time
@@ -125,6 +137,13 @@ AmrCoreAdv::Evolve ()
             WriteCheckpointFile();
         }
 
+#ifdef BL_USE_CATALYST_INSITU
+        std::vector<amrex::Vector<amrex::MultiFab>*> states(1, &phi_new);
+        std::vector<std::vector<std::string>> names(1, {"phi"});
+
+        insitu_data_adaptor->CoProcess(step, cur_time, static_cast<amrex::AmrMesh*>(this), states, names);
+#endif
+
 #ifdef AMREX_MEM_PROFILING
         {
             std::ostringstream ss;
@@ -139,6 +158,10 @@ AmrCoreAdv::Evolve ()
     if (plot_int > 0 && istep[0] > last_plot_file_step) {
 	WritePlotFile();
     }
+
+#ifdef BL_USE_CATALYST_INSITU
+    insitu_data_adaptor->Finalize();
+#endif
 }
 
 // initializes multilevel data

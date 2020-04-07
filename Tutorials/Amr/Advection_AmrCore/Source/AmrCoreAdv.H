@@ -13,6 +13,12 @@
 #include <AMReX_FluxRegister.H>
 #include <AMReX_BCRec.H>
 
+#if defined(BL_USE_CATALYST_INSITU)
+namespace amrex {
+class AmrMeshCatalystDataAdaptor;
+}
+#endif
+
 using namespace amrex;
 
 class AmrCoreAdv
@@ -175,6 +181,10 @@ private:
     // checkpoint prefix and frequency
     std::string chk_file {"chk"};
     int chk_int = -1;
+
+#if defined(BL_USE_CATALYST_INSITU)
+    amrex::AmrMeshCatalystDataAdaptor *insitu_data_adaptor;
+#endif
 };
 
 #endif
