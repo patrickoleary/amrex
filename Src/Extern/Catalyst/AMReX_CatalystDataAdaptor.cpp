@@ -25,7 +25,6 @@ int
 CatalystDataAdaptor::Initialize()
 {
     auto t0 = std::chrono::high_resolution_clock::now();
-    amrex::Print() << "CatalystDataAdaptor::Initialize" << std::endl;
 
     // read config from ParmParse
     ParmParse pp("catalyst");
@@ -83,7 +82,6 @@ CatalystDataAdaptor::Finalize()
     amrex::Print() << "Catalyst Begin finalize..." << std::endl;
     auto t0 = std::chrono::high_resolution_clock::now();
 
-    amrex::Print() << "CatalystDataAdaptor::Finalize" << std::endl;
     this->Processor->Delete();
     this->Processor = nullptr;
 

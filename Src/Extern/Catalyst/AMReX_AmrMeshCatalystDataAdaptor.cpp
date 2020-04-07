@@ -107,10 +107,8 @@ namespace amrex {
             amrex::Print() << "Catalyst Begin CoProcess..." << std::endl;
             auto t0 = std::chrono::high_resolution_clock::now();
 
-            amrex::Print() << "AmrMeshCatalystDataAdaptor::CoProcess" << std::endl;
-
             vtkNew<vtkCPDataDescription> dataDescription;
-            dataDescription->AddInput("amrmesh-input");
+            dataDescription->AddInput("input");
             dataDescription->SetTimeData(time, step);
             if (this->Processor->RequestDataDescription(dataDescription) != 0)
             {
@@ -122,11 +120,12 @@ namespace amrex {
                 this->Internals->States = states;
                 this->Internals->descriptorMap.Initialize(states, names);
 
+                // Map simulation data structures to VTK data structures
                 this->BuildGrid(processId);
                 this->AddGhostCellsArray(processId);
                 this->AddArrays(processId, states, names);
 
-                vtkCPInputDataDescription* inputDataDescription = dataDescription->GetInputDescriptionByName("amrex-input");
+                vtkCPInputDataDescription* inputDataDescription = dataDescription->GetInputDescriptionByName("input");
                 inputDataDescription->SetGrid(this->Internals->amrMesh);
 
                 // Set whole extent
@@ -153,8 +152,6 @@ namespace amrex {
 //-----------------------------------------------------------------------------
     int AmrMeshCatalystDataAdaptor::BuildGrid(int rank)
     {
-        amrex::Print() << "AmrMeshCatalystDataAdaptor::BuildGrid" << std::endl;
-
         unsigned int nLevels = this->Internals->Mesh->finestLevel() + 1;
 
         // initialize new vtk datasets
@@ -189,7 +186,13 @@ namespace amrex {
             this->Internals->amrMesh->SetSpacing(i, spacing);
 
             // refinement ratio
-            int cRefRatio = nLevels > 1 ? this->Internals->Mesh->refRatio(i)[0] : 1;
+            int cRefRatio;
+            if (i < (nLevels - 1)) {
+                cRefRatio = nLevels > 1 ? this->Internals->Mesh->refRatio(i)[0] : 1;
+            }
+            else {
+                cRefRatio = 1;
+            }
             this->Internals->amrMesh->SetRefinementRatio(i, cRefRatio);
 
             // loop over boxes
@@ -245,8 +248,6 @@ namespace amrex {
 //-----------------------------------------------------------------------------
     int AmrMeshCatalystDataAdaptor::AddGhostCellsArray(int rank)
     {
-        amrex::Print() << "AmrMeshCatalystDataAdaptor::AddGhostCellsArray" << std::endl;
-
         // loop over levels
         unsigned int nLevels = this->Internals->Mesh->finestLevel() + 1;
 
@@ -334,8 +335,6 @@ namespace amrex {
     //-----------------------------------------------------------------------------
     int AmrMeshCatalystDataAdaptor::AddArray(int rank, int association, const std::string &arrayName)
     {
-        amrex::Print() << "AmrMeshCatalystDataAdaptor::AddArray" << std::endl;
-
         if ((association != vtkDataObject::CELL) &&
             (association != vtkDataObject::POINT))
         {
@@ -473,8 +472,6 @@ namespace amrex {
                                               const std::vector<amrex::Vector<amrex::MultiFab> *> &states,
                                               const std::vector<std::vector<std::string>> &names)
     {
-        amrex::Print() << "AmrMeshCatalystDataAdaptor::AddArrays" << std::endl;
-
         int nStates = states.size();
         for (int i = 0; i < nStates; ++i)
         {

@@ -120,12 +120,10 @@ namespace amrex {
             amrex::Print() << "Catalyst Begin CoProcess..." << std::endl;
             auto t0 = std::chrono::high_resolution_clock::now();
 
-            amrex::Print() << "AMRCatalystDataAdaptor::CoProcess" << std::endl;
-
             this->Internals->amr = aamr;
 
             vtkNew<vtkCPDataDescription> dataDescription;
-            dataDescription->AddInput("amr-input");
+            dataDescription->AddInput("input");
             dataDescription->SetTimeData(this->Internals->amr->cumTime(), this->Internals->amr->levelSteps(0));
             if (this->Processor->RequestDataDescription(dataDescription) != 0)
             {
@@ -140,7 +138,7 @@ namespace amrex {
                 this->AddGhostCellsArray(processId);
                 this->AddArrays(processId, levels[0]->get_desc_lst());
 
-                vtkCPInputDataDescription* inputDataDescription = dataDescription->GetInputDescriptionByName("amrex-input");
+                vtkCPInputDataDescription* inputDataDescription = dataDescription->GetInputDescriptionByName("input");
                 inputDataDescription->SetGrid(this->Internals->amrMesh);
 
                 // Set whole extent
@@ -167,8 +165,6 @@ namespace amrex {
 //-----------------------------------------------------------------------------
     int AmrCatalystDataAdaptor::BuildGrid(int rank)
     {
-        amrex::Print() << "AmrCatalystDataAdaptor::BuildGrid" << std::endl;
-
         // get levels
         amrex::Vector<std::unique_ptr<amrex::AmrLevel>> &levels = this->Internals->amr->getAmrLevels();
 
@@ -206,7 +202,12 @@ namespace amrex {
             this->Internals->amrMesh->SetSpacing(i, spacing);
 
             // refinement ratio
-            this->Internals->amrMesh->SetRefinementRatio(i, levels[i]->fineRatio()[0]);
+            if (i < (nLevels - 1)) {
+                this->Internals->amrMesh->SetRefinementRatio(i, levels[i]->fineRatio()[0]);
+            }
+            else {
+                this->Internals->amrMesh->SetRefinementRatio(i, 1);
+            }
 
             // loop over boxes
             const amrex::BoxArray& ba = levels[i]->boxArray();
@@ -261,8 +262,6 @@ namespace amrex {
 //-----------------------------------------------------------------------------
     int AmrCatalystDataAdaptor::AddGhostCellsArray(int rank)
     {
-        amrex::Print() << "AmrCatalystDataAdaptor::AddGhostCellsArray" << std::endl;
-
         // loop over levels
         amrex::Vector<std::unique_ptr<amrex::AmrLevel>> &levels = this->Internals->amr->getAmrLevels();
 
@@ -353,8 +352,6 @@ namespace amrex {
 //-----------------------------------------------------------------------------
     int AmrCatalystDataAdaptor::AddArray(int rank, int association, const std::string &arrayName)
     {
-        amrex::Print() << "AmrCatalystDataAdaptor::AddArray" << std::endl;
-
         if ((association != vtkDataObject::CELL) &&
             (association != vtkDataObject::POINT))
         {
@@ -490,8 +487,6 @@ namespace amrex {
 
 //-----------------------------------------------------------------------------
     int AmrCatalystDataAdaptor::AddArrays(int rank, const DescriptorList &descriptors) {
-        amrex::Print() << "AmrCatalystDataAdaptor::AddArrays" << std::endl;
-
         int ndesc = descriptors.size();
         for (int i = 0; i < ndesc; ++i) {
 
