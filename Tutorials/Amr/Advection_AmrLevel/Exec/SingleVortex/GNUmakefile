@@ -16,6 +16,8 @@ USE_PARTICLES = TRUE
 USE_MPI    = TRUE
 USE_OMP    = FALSE
 
+USE_CATALYST_INSITU = TRUE
+
 Bpack   := ./Make.package 
 Blocs   := . 
 

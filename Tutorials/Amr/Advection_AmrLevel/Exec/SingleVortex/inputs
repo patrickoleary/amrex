@@ -1,5 +1,5 @@
 # ------------------  INPUTS TO MAIN PROGRAM  -------------------
-max_step = 1000000
+max_step = 100
 stop_time = 2.0
 
 # PROBLEM SIZE & GEOMETRY
@@ -42,3 +42,8 @@ amr.probin_file = probin
 
 # TRACER PARTICLES
 adv.do_tracers = 0
+
+# ParaView Catalyst In Situ
+catalyst.enabled = 1
+catalyst.frequency = 1
+catalyst.script = script.py
