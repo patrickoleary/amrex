@@ -17,6 +17,11 @@ ifeq ($(USE_CATALYST_INSITU),TRUE)
 
   C$(CATALYST_INSITU)_sources += AMReX_AmrCatalystDataAdaptor.cpp
 
+  # Amr + Particles Catalyst data adaptor
+  C$(CATALYST_INSITU)_headers += AMReX_AmrParticlesCatalystDataAdaptor.H
+
+  C$(CATALYST_INSITU)_sources += AMReX_AmrParticlesCatalystDataAdaptor.cpp
+
 endif
 
 VPATH_LOCATIONS += $(AMREX_HOME)/Src/Extern/Catalyst

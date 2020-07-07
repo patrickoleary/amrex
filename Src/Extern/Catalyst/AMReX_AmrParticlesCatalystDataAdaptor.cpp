@@ -1,4 +1,4 @@
-#include "AMReX_AmrCatalystDataAdaptor.H"
+#include "AMReX_AmrParticlesCatalystDataAdaptor.H"
 
 #include <chrono>
 #include <map>
@@ -16,6 +16,7 @@
 #include <vtkObjectFactory.h>          // VTK::CommonCore
 #include <vtkOverlappingAMR.h>         // VTK::CommonDataModel
 #include <vtkPointData.h>              // VTK::CommonDataModel
+#include <vtkPolyData.h>               // VTK::CommonDataModel
 #include <vtkCPProcessor.h>            // ParaView::Catalyst
 #include <vtkUniformGrid.h>            // VTK::CommonDataModel
 #include <vtkUnsignedCharArray.h>      // VTK::CommonCore
@@ -54,18 +55,18 @@ unsigned int numActiveLevels(
 
 namespace amrex {
 
-    //-----------------------------------------------------------------------------
-    AmrCatalystDataAdaptor::AmrCatalystDataAdaptor()
+//-----------------------------------------------------------------------------
+    AmrParticlesCatalystDataAdaptor::AmrParticlesCatalystDataAdaptor()
     {
     }
 
 //-----------------------------------------------------------------------------
-    AmrCatalystDataAdaptor::~AmrCatalystDataAdaptor()
+    AmrParticlesCatalystDataAdaptor::~AmrParticlesCatalystDataAdaptor()
     {
     }
 
 //-----------------------------------------------------------------------------
-    int AmrCatalystDataAdaptor::CoProcess(Amr *aamr) {
+    int AmrParticlesCatalystDataAdaptor::CoProcess(Amr *aamr) {
         int ret = 0;
         if (doCoProcess()) {
             amrex::Print() << "Catalyst Begin CoProcess..." << std::endl;
@@ -117,7 +118,7 @@ namespace amrex {
     }
 
 //-----------------------------------------------------------------------------
-    int AmrCatalystDataAdaptor::BuildGrid(int rank) {
+    int AmrParticlesCatalystDataAdaptor::BuildGrid(int rank) {
         // get levels
         amrex::Vector<std::unique_ptr<amrex::AmrLevel>> &levels = this->amr->getAmrLevels();
 
@@ -207,7 +208,7 @@ namespace amrex {
     }
 
 //-----------------------------------------------------------------------------
-    int AmrCatalystDataAdaptor::AddGhostCellsArray(int rank) {
+    int AmrParticlesCatalystDataAdaptor::AddGhostCellsArray(int rank) {
         // loop over levels
         amrex::Vector<std::unique_ptr<amrex::AmrLevel>> &levels = this->amr->getAmrLevels();
 
@@ -270,7 +271,7 @@ namespace amrex {
                 vtkUniformGrid *blockMesh = this->amrMesh->GetDataSet(i, j);
 
                 if (!blockMesh) {
-                    amrex::Print() << "Error @ AmrCatalystDataAdaptor::AddGhostCellsArray: "
+                    amrex::Print() << "Error @ AmrParticlesCatalystDataAdaptor::AddGhostCellsArray: "
                                    << " Empty block " << i << ", " << j
                                    << std::endl;
                     return -1;
@@ -291,10 +292,10 @@ namespace amrex {
     }
 
 //-----------------------------------------------------------------------------
-    int AmrCatalystDataAdaptor::AddArray(int rank, int association, const std::string &arrayName) {
+    int AmrParticlesCatalystDataAdaptor::AddArray(int rank, int association, const std::string &arrayName) {
         if ((association != vtkDataObject::CELL) &&
             (association != vtkDataObject::POINT)) {
-            amrex::Print() << "Error @ AmrCatalystDataAdaptor::AddArray: "
+            amrex::Print() << "Error @ AmrParticlesCatalystDataAdaptor::AddArray: "
                            << "Invalid association " << association
                            << std::endl;
             return -1;
@@ -307,7 +308,7 @@ namespace amrex {
         int fab = 0;
         int comp = 0;
         if (this->descriptorMap->GetIndex(arrayName, association, fab, comp)) {
-            amrex::Print() << "Error @ AmrCatalystDataAdaptor::AddArray: "
+            amrex::Print() << "Error @ AmrParticlesCatalystDataAdaptor::AddArray: "
                            << "Failed to locate descriptor for "
                            << this->descriptorMap->GetAttributesName(association)
                            << " data array " << arrayName
@@ -326,7 +327,7 @@ namespace amrex {
 
             if (!((association == vtkDataObject::CELL) && state.is_cell_centered()) &&
                 !((association == vtkDataObject::POINT) && state.is_nodal())) {
-                amrex::Print() << "Error @ AmrCatalystDataAdaptor::AddArray: "
+                amrex::Print() << "Error @ AmrParticlesCatalystDataAdaptor::AddArray: "
                                << "association does not match MultiFAB centering"
                                << std::endl;
                 return -1;
@@ -335,7 +336,7 @@ namespace amrex {
             // check component id
             int nComp = state.nComp();
             if (comp >= nComp) {
-                amrex::Print() << "Error @ AmrCatalystDataAdaptor::AddArray: "
+                amrex::Print() << "Error @ AmrParticlesCatalystDataAdaptor::AddArray: "
                                << "Component " << comp << " out of bounds"
                                << std::endl;
                 return -1;
@@ -400,7 +401,7 @@ namespace amrex {
                     da->SetArray(pcd, nlen, 1);
                     ug->GetPointData()->AddArray(da);
                 } else {
-                    amrex::Print() << "Warning @ AmrCatalystDataAdaptor::AddArray: "
+                    amrex::Print() << "Warning @ AmrParticlesCatalystDataAdaptor::AddArray: "
                                    << "Face or edge centered component " << comp << " skipped"
                                    << std::endl;
                 }
@@ -414,7 +415,7 @@ namespace amrex {
     }
 
 //-----------------------------------------------------------------------------
-    int AmrCatalystDataAdaptor::AddArrays(int rank, const DescriptorList &descriptors) {
+    int AmrParticlesCatalystDataAdaptor::AddArrays(int rank, const DescriptorList &descriptors) {
         int ndesc = descriptors.size();
         for (int i = 0; i < ndesc; ++i) {
 

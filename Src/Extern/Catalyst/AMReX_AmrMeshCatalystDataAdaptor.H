@@ -8,10 +8,13 @@
 
 #include <AMReX_Vector.H>
 
+class vtkOverlappingAMR;
+
 namespace amrex
 {
-class AmrMesh;
-class MultiFab;
+    class AmrMesh;
+    class AmrMeshDescriptorMap;
+    class MultiFab;
 
 /// Instrumentation for simulations that use amrex::AmrMesh/Core
 /// inherits intialize and finalize from amrex::CatalystDataAdaptor
@@ -30,8 +33,11 @@ public:
                   const std::vector<std::vector<std::string>> &names);
 
 private:
-    struct InternalsType;
-    InternalsType *Internals;
+    amrex::AmrMesh *Mesh;
+    std::vector<amrex::Vector<amrex::MultiFab> *> States;
+    amrex::AmrMeshDescriptorMap *descriptorMap;
+    vtkOverlappingAMR *amrMesh;
+
     int BuildGrid(int rank);
     int AddGhostCellsArray(int rank);
     int AddArray(int rank, int association, const std::string &arrayName);

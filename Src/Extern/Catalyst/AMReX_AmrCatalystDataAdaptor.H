@@ -3,10 +3,13 @@
 
 #include "AMReX_CatalystDataAdaptor.H"
 
+class vtkOverlappingAMR;
+
 namespace amrex
 {
-class Amr;
-class DescriptorList;
+    class Amr;
+    class AmrDescriptorMap;
+    class DescriptorList;
 
 /// Instrumentation for simulations that use amrex::Amr
 /// inherits Intialize and Finalize from amrex::CatalystDataAdaptor
@@ -20,17 +23,17 @@ public:
     void operator=(const AmrCatalystDataAdaptor&) = delete;
 
     // invoke CoProcess with data from an Amr instance
-    int CoProcess(amrex::Amr *dataSource);
-
-    int GetGrid();
+    int CoProcess(amrex::Amr *meshDataSource);
 
 private:
-    struct InternalsType;
-    InternalsType *Internals;
     int BuildGrid(int rank);
     int AddGhostCellsArray(int rank);
     int AddArray(int rank, int association, const std::string &arrayName);
     int AddArrays(int rank, const DescriptorList &descriptors);
+
+    amrex::Amr *amr;
+    amrex::AmrDescriptorMap *descriptorMap;
+    vtkOverlappingAMR *amrMesh;
 };
 
 }

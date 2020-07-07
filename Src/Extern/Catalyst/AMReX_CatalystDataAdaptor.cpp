@@ -68,6 +68,7 @@ CatalystDataAdaptor::Initialize()
 bool
 CatalystDataAdaptor::doCoProcess()
 {
+    if (!enabled) return 0;
     bool ret = (frequency > 0) && ((counter % frequency) == 0);
     counter += 1;
     return ret;
@@ -76,6 +77,7 @@ CatalystDataAdaptor::doCoProcess()
 int
 CatalystDataAdaptor::Finalize()
 {
+    if (!enabled) return 0;
     if (!this->Processor)
         return 0;
 

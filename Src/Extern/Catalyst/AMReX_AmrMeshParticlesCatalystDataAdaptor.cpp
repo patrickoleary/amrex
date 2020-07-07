@@ -1,4 +1,4 @@
-#include "AMReX_AmrCatalystDataAdaptor.H"
+#include "AMReX_AmrMeshParticlesCatalystDataAdaptor.H"
 
 #include <chrono>
 #include <map>
@@ -16,96 +16,83 @@
 #include <vtkObjectFactory.h>          // VTK::CommonCore
 #include <vtkOverlappingAMR.h>         // VTK::CommonDataModel
 #include <vtkPointData.h>              // VTK::CommonDataModel
+#include <vtkPolyData.h>               // VTK::CommonDataModel
 #include <vtkCPProcessor.h>            // ParaView::Catalyst
 #include <vtkUniformGrid.h>            // VTK::CommonDataModel
 #include <vtkUnsignedCharArray.h>      // VTK::CommonCore
 
-#include <AMReX_Amr.H>
-#include <AMReX_AmrDescriptorMap.H>
-#include <AMReX_AmrLevel.H>
 #include <AMReX_ArrayLim.H>
+#include <AMReX_AmrMesh.H>
+#include <AMReX_AmrMeshDescriptorMap.H>
 #include <AMReX_Box.H>
 #include <AMReX_BoxArray.H>
 #include <AMReX_DistributionMapping.H>
 #include <AMReX_Geometry.H>
 #include <AMReX_IndexType.H>
-#include <AMReX_MFIter.H>
+#include <AMReX_MultiFab.H>
 #include <AMReX_Print.H>
 #include <AMReX_RealBox.H>
-#include <AMReX_StateDescriptor.H>
+#include <AMReX_Vector.H>
 #include <AMReX_VTKGhostUtils.H>
 
-// return the number of levels currently in use
-static
-unsigned int numActiveLevels(
-        amrex::Vector<std::unique_ptr<amrex::AmrLevel>> &levels)
-{
-    unsigned int nLevels = levels.size();
-    for (int i = 0; i < nLevels; ++i)
-    {
-        if (!levels[i])
-        {
-            nLevels = i;
-            break;
-        }
-    }
-    return nLevels;
-}
-
 namespace amrex {
-
-    //-----------------------------------------------------------------------------
-    AmrCatalystDataAdaptor::AmrCatalystDataAdaptor()
+//-----------------------------------------------------------------------------
+    AmrMeshParticlesCatalystDataAdaptor::AmrMeshParticlesCatalystDataAdaptor()
     {
     }
 
 //-----------------------------------------------------------------------------
-    AmrCatalystDataAdaptor::~AmrCatalystDataAdaptor()
+    AmrMeshParticlesCatalystDataAdaptor::~AmrMeshParticlesCatalystDataAdaptor()
     {
     }
 
-//-----------------------------------------------------------------------------
-    int AmrCatalystDataAdaptor::CoProcess(Amr *aamr) {
+    int AmrMeshParticlesCatalystDataAdaptor::CoProcess(unsigned int step, double time, amrex::AmrMesh *mesh,
+                                              const std::vector<amrex::Vector<amrex::MultiFab>*> &states,
+                                              const std::vector<std::vector<std::string>> &names)
+    {
         int ret = 0;
-        if (doCoProcess()) {
+        if (doCoProcess())
+        {
             amrex::Print() << "Catalyst Begin CoProcess..." << std::endl;
             auto t0 = std::chrono::high_resolution_clock::now();
 
-            this->amr = aamr;
+            this->Mesh = mesh;
 
-            vtkNew <vtkCPDataDescription> dataDescription;
+            vtkNew<vtkCPDataDescription> dataDescription;
             dataDescription->AddInput("inputmesh");
-            dataDescription->SetTimeData(this->amr->cumTime(), this->amr->levelSteps(0));
-            if (this->Processor->RequestDataDescription(dataDescription) != 0) {
-                vtkMultiProcessController *controller = vtkMultiProcessController::GetGlobalController();
+            dataDescription->SetTimeData(time, step);
+            if (this->Processor->RequestDataDescription(dataDescription) != 0)
+            {
+                vtkMultiProcessController* controller = vtkMultiProcessController::GetGlobalController();
                 int numberOfProcesses = controller->GetNumberOfProcesses();
                 int processId = controller->GetLocalProcessId();
 
-                amrex::Vector<std::unique_ptr<amrex::AmrLevel>> &levels = this->amr->getAmrLevels();
-                this->descriptorMap = new AmrDescriptorMap;
-                this->descriptorMap->Initialize(levels[0]->get_desc_lst());
+                this->States = states;
+                this->descriptorMap = new AmrMeshDescriptorMap;
+                this->descriptorMap->Initialize(states, names);
 
                 this->amrMesh = vtkOverlappingAMR::New();
                 this->BuildGrid(processId);
                 this->AddGhostCellsArray(processId);
-                this->AddArrays(processId, levels[0]->get_desc_lst());
+                this->AddArrays(processId, states, names);
 
-                vtkCPInputDataDescription *inputDataDescription = dataDescription->GetInputDescriptionByName(
-                        "inputmesh");
+                vtkCPInputDataDescription* inputDataDescription = dataDescription->GetInputDescriptionByName("inputmesh");
                 inputDataDescription->SetGrid(this->amrMesh);
 
-                int wholeExtent[6] = {0, numberOfProcesses, 0, 1, 0, 1};
+                // Set whole extent
+                int wholeExtent[6] = { 0, numberOfProcesses, 0, 1, 0, 1 };
                 inputDataDescription->SetWholeExtent(wholeExtent);
 
                 // CoProcess
                 this->Processor->CoProcess(dataDescription);
 
                 // Release data
-                this->amr = nullptr;
+                this->Mesh = nullptr;
                 this->amrMesh->Delete();
                 this->amrMesh = nullptr;
                 this->descriptorMap->Clear();
                 this->descriptorMap = nullptr;
+                this->States.clear();
             }
 
             auto t1 = std::chrono::high_resolution_clock::now();
@@ -117,51 +104,54 @@ namespace amrex {
     }
 
 //-----------------------------------------------------------------------------
-    int AmrCatalystDataAdaptor::BuildGrid(int rank) {
-        // get levels
-        amrex::Vector<std::unique_ptr<amrex::AmrLevel>> &levels = this->amr->getAmrLevels();
-
-        unsigned int nLevels = numActiveLevels(levels);
+    int AmrMeshParticlesCatalystDataAdaptor::BuildGrid(int rank)
+    {
+        unsigned int nLevels = this->Mesh->finestLevel() + 1;
 
         // num levels and blocks per level
         std::vector<int> nBlocks(nLevels);
         for (unsigned int i = 0; i < nLevels; ++i)
-            nBlocks[i] = levels[i]->boxArray().size();
+            nBlocks[i] = this->Mesh->boxArray(i).size();
 
         this->amrMesh->Initialize(nLevels, nBlocks.data());
 
         // origin
-        const amrex::RealBox &pd = levels[0]->Geom().ProbDomain();
+        const amrex::RealBox& pd = this->Mesh->Geom(0).ProbDomain();
         double origin[3] = {AMREX_ARLIM(pd.lo())};
 
         this->amrMesh->SetOrigin(origin);
 
         long gid = 0;
-        for (unsigned int i = 0; i < nLevels; ++i) {
+        for (unsigned int i = 0; i < nLevels; ++i)
+        {
             // domain decomp
-            const amrex::DistributionMapping &dmap = levels[i]->DistributionMap();
+            const amrex::DistributionMapping &dmap = this->Mesh->DistributionMap(i);
 
             // ghost zones
-            amrex::MultiFab &state = levels[i]->get_new_data(0);
+            amrex::MultiFab& state = this->States[0]->at(i);
             unsigned int ng = state.nGrow();
 
             // spacing
-            const amrex::Geometry &geom = levels[i]->Geom();
-            double spacing[3] = {AMREX_ARLIM(geom.CellSize())};
+            const amrex::Geometry &geom = this->Mesh->Geom(i);
+            double spacing [3] = {AMREX_ARLIM(geom.CellSize())};
             this->amrMesh->SetSpacing(i, spacing);
 
             // refinement ratio
+            int cRefRatio;
             if (i < (nLevels - 1)) {
-                this->amrMesh->SetRefinementRatio(i, levels[i]->fineRatio()[0]);
-            } else {
-                this->amrMesh->SetRefinementRatio(i, 1);
+                cRefRatio = nLevels > 1 ? this->Mesh->refRatio(i)[0] : 1;
             }
+            else {
+                cRefRatio = 1;
+            }
+            this->amrMesh->SetRefinementRatio(i, cRefRatio);
 
             // loop over boxes
-            const amrex::BoxArray &ba = levels[i]->boxArray();
+            const amrex::BoxArray& ba = this->Mesh->boxArray(i);
             unsigned int nBoxes = ba.size();
 
-            for (unsigned int j = 0; j < nBoxes; ++j) {
+            for (unsigned int j = 0; j < nBoxes; ++j)
+            {
                 // cell centered box
                 amrex::Box cbox = ba[j];
 
@@ -207,23 +197,23 @@ namespace amrex {
     }
 
 //-----------------------------------------------------------------------------
-    int AmrCatalystDataAdaptor::AddGhostCellsArray(int rank) {
+    int AmrMeshParticlesCatalystDataAdaptor::AddGhostCellsArray(int rank)
+    {
         // loop over levels
-        amrex::Vector<std::unique_ptr<amrex::AmrLevel>> &levels = this->amr->getAmrLevels();
+        unsigned int nLevels = this->Mesh->finestLevel() + 1;
 
-        unsigned int nLevels = numActiveLevels(levels);
-
-        std::vector<std::vector<unsigned char *>> masks(nLevels);
-        for (unsigned int i = 0; i < nLevels; ++i) {
+        std::vector<std::vector<unsigned char*>> masks(nLevels);
+        for (unsigned int i = 0; i < nLevels; ++i)
+        {
             // allocate mask arrays
-            const amrex::BoxArray &boxes = levels[i]->boxArray();
-            const amrex::DistributionMapping &dmap = levels[i]->DistributionMap();
-            const amrex::Box &pdom = levels[i]->Domain();
+            const amrex::BoxArray &boxes = this->Mesh->boxArray(i);
+            const amrex::DistributionMapping &dmap = this->Mesh->DistributionMap(i);
+            const amrex::Box &pdom = this->Mesh->Geom(i).Domain();
 
-            amrex::MultiFab &state = levels[i]->get_new_data(0);
+            amrex::MultiFab& state = this->States[0]->at(i);
             unsigned int ng = state.nGrow();
 
-            std::vector<unsigned char *> mask;
+            std::vector<unsigned char*> mask;
             VTKGhostUtils::AllocateBoxArray<unsigned char>(rank, pdom, boxes, dmap, ng, mask);
 
             // mask ghost cells
@@ -235,43 +225,46 @@ namespace amrex {
 
         // loop over coarse levels
         unsigned int nCoarseLevels = nLevels - 1;
-        for (unsigned int i = 0; i < nCoarseLevels; ++i) {
+        for (unsigned int i = 0; i < nCoarseLevels; ++i)
+        {
             int ii = i + 1;
 
             // mask regions covered by refinement
-            amrex::MultiFab &state = levels[i]->get_new_data(0);
+            amrex::MultiFab& state = this->States[0]->at(i);
             unsigned int ng = state.nGrow();
 
-            const amrex::Box &pdom = levels[i]->Domain();
-            const amrex::BoxArray &cBoxes = levels[i]->boxArray();
-            const amrex::DistributionMapping &cMap = levels[i]->DistributionMap();
-            const amrex::BoxArray &fBoxes = levels[ii]->boxArray();
-            amrex::IntVect fRefRatio = levels[i]->fineRatio();
+            const amrex::Box &pdom = this->Mesh->Geom(i).Domain();
+            const amrex::BoxArray &cBoxes = this->Mesh->boxArray(i);
+            const amrex::DistributionMapping &cMap = this->Mesh->DistributionMap(i);
+            const amrex::BoxArray &fBoxes = this->Mesh->boxArray(ii);
+            amrex::IntVect cRefRatio = this->Mesh->refRatio(i);
 
-            VTKGhostUtils::MaskCoveredCells<unsigned char>(rank, pdom, cBoxes, cMap, fBoxes, fRefRatio, ng, masks[i]);
+            VTKGhostUtils::MaskCoveredCells<unsigned char>(rank, pdom, cBoxes, cMap, fBoxes, cRefRatio, ng, masks[i]);
         }
 
         // loop over levels
-        for (unsigned int i = 0; i < nLevels; ++i) {
-            const amrex::DistributionMapping &dMap = levels[i]->DistributionMap();
+        for (unsigned int i = 0; i < nLevels; ++i)
+        {
+            const amrex::DistributionMapping &dmap = this->Mesh->DistributionMap(i);
 
             // mask arrays for this level
-            std::vector<unsigned char *> &mask = masks[i];
+            std::vector<unsigned char*> &mask = masks[i];
 
             // loop over boxes
-            const amrex::BoxArray &ba = levels[i]->boxArray();
+            const amrex::BoxArray& ba = this->Mesh->boxArray(i);
             unsigned int nBoxes = ba.size();
 
-            for (unsigned int j = 0; j < nBoxes; ++j) {
-                // skip non-local blocks
-                if (dMap[j] != rank)
+            for (unsigned int j = 0; j < nBoxes; ++j)
+            {
+                if (dmap[j] != rank)
                     continue;
 
                 vtkUniformGrid *blockMesh = this->amrMesh->GetDataSet(i, j);
 
-                if (!blockMesh) {
-                    amrex::Print() << "Error @ AmrCatalystDataAdaptor::AddGhostCellsArray: "
-                                   << " Empty block " << i << ", " << j
+                if (!blockMesh)
+                {
+                    amrex::Print() << "Error @ AmrMeshParticlesCatalystDataAdaptor::AddGhostCellsArray: "
+                                   <<" Empty block " << i << ", " << j
                                    << std::endl;
                     return -1;
                 }
@@ -290,43 +283,49 @@ namespace amrex {
         return 0;
     }
 
-//-----------------------------------------------------------------------------
-    int AmrCatalystDataAdaptor::AddArray(int rank, int association, const std::string &arrayName) {
+    //-----------------------------------------------------------------------------
+    int AmrMeshParticlesCatalystDataAdaptor::AddArray(int rank, int association, const std::string &arrayName)
+    {
         if ((association != vtkDataObject::CELL) &&
-            (association != vtkDataObject::POINT)) {
-            amrex::Print() << "Error @ AmrCatalystDataAdaptor::AddArray: "
+            (association != vtkDataObject::POINT))
+        {
+            amrex::Print() << "Error @ AmrMeshParticlesCatalystDataAdaptor::AddArray: "
                            << "Invalid association " << association
                            << std::endl;
             return -1;
         }
 
-        amrex::Vector<std::unique_ptr<amrex::AmrLevel>> &levels = this->amr->getAmrLevels();
-
         // find the indices of the multifab and component within for
         // the named array
         int fab = 0;
         int comp = 0;
-        if (this->descriptorMap->GetIndex(arrayName, association, fab, comp)) {
-            amrex::Print() << "Error @ AmrCatalystDataAdaptor::AddArray: "
+        if (this->descriptorMap->GetIndex(arrayName, association, fab, comp))
+        {
+            amrex::Print() << "Error @ AmrMeshParticlesCatalystDataAdaptor::AddArray: "
                            << "Failed to locate descriptor for "
                            << this->descriptorMap->GetAttributesName(association)
                            << " data array " << arrayName
                            << std::endl;
             return -1;
         }
+
         // loop over levels
-        unsigned int nLevels = numActiveLevels(levels);
-        for (unsigned int i = 0; i < nLevels; ++i) {
+        unsigned int nLevels = this->Mesh->finestLevel() + 1;
+
+        for (unsigned int i = 0; i < nLevels; ++i)
+        {
             // domain decomp
-            const amrex::DistributionMapping &dmap = levels[i]->DistributionMap();
+            const amrex::DistributionMapping &dmap = this->Mesh->DistributionMap(i);
 
             // ghost zones
-            amrex::MultiFab &state = levels[i]->get_new_data(fab);
+            amrex::MultiFab& state = this->States[fab]->at(i);
             unsigned int ng = state.nGrow();
 
+            // check centering
             if (!((association == vtkDataObject::CELL) && state.is_cell_centered()) &&
-                !((association == vtkDataObject::POINT) && state.is_nodal())) {
-                amrex::Print() << "Error @ AmrCatalystDataAdaptor::AddArray: "
+                !((association == vtkDataObject::POINT) && state.is_nodal()))
+            {
+                amrex::Print() << "Error @ AmrMeshParticlesCatalystDataAdaptor::AddArray: "
                                << "association does not match MultiFAB centering"
                                << std::endl;
                 return -1;
@@ -334,18 +333,20 @@ namespace amrex {
 
             // check component id
             int nComp = state.nComp();
-            if (comp >= nComp) {
-                amrex::Print() << "Error @ AmrCatalystDataAdaptor::AddArray: "
+            if (comp >= nComp)
+            {
+                amrex::Print() << "Error @ AmrMeshParticlesCatalystDataAdaptor::AddArray: "
                                << "Component " << comp << " out of bounds"
                                << std::endl;
                 return -1;
             }
 
             // loop over boxes
-            const amrex::BoxArray &ba = levels[i]->boxArray();
+            const amrex::BoxArray& ba = this->Mesh->boxArray(i);
             unsigned int nBoxes = ba.size();
 
-            for (unsigned int j = 0; j < nBoxes; ++j) {
+            for (unsigned int j = 0; j < nBoxes; ++j)
+            {
                 // cell centered box
                 amrex::Box cbox = ba[j];
 
@@ -391,52 +392,58 @@ namespace amrex {
                 // set component name
                 da->SetName(arrayName.c_str());
 
-                if (state[j].box().ixType() == amrex::IndexType::TheCellType()) {
+                if (state[j].box().ixType() == amrex::IndexType::TheCellType())
+                {
                     // zero copy cell centered
                     da->SetArray(pcd, clen, 1);
                     ug->GetCellData()->AddArray(da);
-                } else if (state[j].box().ixType() == amrex::IndexType::TheNodeType()) {
+                }
+                else if (state[j].box().ixType() == amrex::IndexType::TheNodeType())
+                {
                     // zero copy point centered
                     da->SetArray(pcd, nlen, 1);
                     ug->GetPointData()->AddArray(da);
-                } else {
-                    amrex::Print() << "Warning @ AmrCatalystDataAdaptor::AddArray: "
+                }
+                else
+                {
+                    amrex::Print() << "Warning @ AmrMeshParticlesCatalystDataAdaptor::AddArray: "
                                    << "Face or edge centered component " << comp << " skipped"
                                    << std::endl;
                 }
 
                 da->Delete();
-
             }
         }
 
         return 0;
     }
 
-//-----------------------------------------------------------------------------
-    int AmrCatalystDataAdaptor::AddArrays(int rank, const DescriptorList &descriptors) {
-        int ndesc = descriptors.size();
-        for (int i = 0; i < ndesc; ++i) {
+    //-----------------------------------------------------------------------------
+    int AmrMeshParticlesCatalystDataAdaptor::AddArrays(int rank,
+                                              const std::vector<amrex::Vector<amrex::MultiFab> *> &states,
+                                              const std::vector<std::vector<std::string>> &names)
+    {
+        int nStates = states.size();
+        for (int i = 0; i < nStates; ++i)
+        {
+            amrex::MultiFab& state = states[i]->at(0);
+            int nComp = state.nComp();
 
-            const StateDescriptor &desc = descriptors[i];
-            int ncomp = desc.nComp();
-            IndexType itype = desc.getType();
+            for (int j = 0; j < nComp; ++j)
+            {
+                const std::string &arrayName = names[i][j];
 
-            for (int j = 0; j < ncomp; ++j) {
-
-                std::string arrayName = desc.name(j);
-
-                if (itype.cellCentered()) {
+                if (state.is_cell_centered())
+                {
                     this->AddArray(rank, vtkDataObject::CELL, arrayName);
-                } else if (itype.nodeCentered()) {
-
+                }
+                else if (state.is_nodal())
+                {
                     this->AddArray(rank, vtkDataObject::POINT, arrayName);
-
                 }
             }
         }
 
         return 0;
     }
-
 }
